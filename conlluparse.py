@@ -39,6 +39,7 @@ class Sentence:
         sentences.append(self)
 
 conllu_file = open("text.txt") #this is where the conllu file name goes.
+
 first = True
 for line in conllu_file:
     sentence = 0
@@ -72,12 +73,15 @@ def remove_whitespaces_from_array(user_input):
 def remove_char(char, user_input):
     user_input = re.sub(char, '', str(user_input)) #removes the [ and the ]
     return user_input
+
 user_input = input()
+
 for i in sentences:
 
     #for finding with label(first) and feature(second): use ':[cop, past]'
     #to find with relation: use ';nsubj:POS'
     #for plain searching for word: use '<word'
+    #for searching with tree use '|eat>bread'
 
     if user_input[0] == ":": #this is for the label and feature finder
         user_input = remove_char('[\[\]]', user_input)
@@ -98,7 +102,7 @@ for i in sentences:
                         right_feature = True
 
             if right_label and right_feature:
-                print(word.form)
+                print(word.form, word.id)
 
     elif user_input[0] == ";": #this is for the relation
         correct = False
@@ -109,13 +113,13 @@ for i in sentences:
         for itwo in user_input: #iterate through input
             user_input[user_input.index(itwo)] = itwo.strip() #remove all whitespaces
 
-        for word in i.words:
-            if word.deprel.lower().strip() == user_input[0].lower().strip():
-                for dependency in word.deps.keys():
-                    for word in i.words:
-                        if word.id == dependency and word.upostag.lower() == user_input[1]:
-                            correct = True
-                            print(word.form)
+        for word_two in i.words:
+
+            if word_two.deprel.lower().strip() == user_input[0].lower().strip():
+                for word in i.words:
+                    if word.id == word_two.head and word.upostag.lower() == user_input[1]:
+                        correct = True
+                        print(word.form, word.id)
 
     elif user_input[0] == "<":
         counter = 0
@@ -123,4 +127,12 @@ for i in sentences:
         for word in i.words:
             if word.form.lower().strip() == user_input.lower().strip():
                 counter += 1
-        print(counter)
+                print(word.id)
+        print(counter) #this is one word plain #plain search
+
+    elif user_input[0] == "|": #tree
+        user_input = remove_char("|", user_input)
+        user_input = user_input.split("<")
+        user_input[0] = remove_char("<", user_input[0])
+        remove_whitespaces_from_array(user_input)
+        
