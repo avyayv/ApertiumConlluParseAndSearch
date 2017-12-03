@@ -1,13 +1,7 @@
 import re
 import pdb
+import argparse
 
-# We use a revised version of the CoNLL-X format called CoNLL-U. Annotations are encoded in plain text files (UTF-8, using only the LF character as line break, including an LF character at the end of file) with three types of lines:
-#
-# Word lines containing the annotation of a word/token in 10 fields separated by single tab characters; see below.
-# Blank lines marking sentence boundaries.
-# Comment lines starting with hash (#).
-# Sentences consist of one or more word lines, and word lines contain the following fields:
-#
 # ID: Word index, integer starting at 1 for each new sentence; may be a range for multiword tokens; may be a decimal number for empty nodes.
 # FORM: Word form or punctuation symbol.
 # LEMMA: Lemma or stem of word form.
@@ -18,6 +12,7 @@ import pdb
 # DEPREL: Universal dependency relation to the HEAD (root iff HEAD = 0) or a defined language-specific subtype of one.
 # DEPS: Enhanced dependency graph in the form of a list of head-deprel pairs.
 # MISC: Any other annotation.
+
 
 sentences = []
 class Word:
@@ -32,16 +27,49 @@ class Word:
         self.deprel = deprel
         self.deps = deps
         self.misc = misc
+        self.none = "none"
+
+    def text_to_attr(self,str):
+        if str == "id":
+            return self.id
+        elif str == "form":
+            return self.form
+        elif str == "lemma":
+            return self.lemma
+        elif str == "upostag":
+            return self.upostag
+        elif str == "xpostag":
+            return self.xpostag
+        elif str == "feats":
+            return self.feats
+        elif str == "head":
+            return self.head
+        elif str == "deprel":
+            return self.deprel
+        elif str == "deps":
+            return self.deps
+        elif str == "misc":
+            return self.misc
+        elif str == "none":
+            return self.none
+
+
 
 class Sentence:
     def __init__(self, words):
         self.words = words
         sentences.append(self)
 
-conllu_file = open("text.txt") #this is where the conllu file name goes.
 
+parser = argparse.ArgumentParser(description='Parse a conllu file')
+
+parser.add_argument('connlufile', metavar='C', type=file,
+                    help='the file to read')
+parser.add_argument('search', metavar='S', type=str,
+                    help='the searching')
+args = parser.parse_args()
 first = True
-for line in conllu_file:
+for line in args.connlufile:
     sentence = 0
     if first:
         sentence = Sentence([])
@@ -54,7 +82,6 @@ for line in conllu_file:
 
         line = re.sub(' +',',', line) #removes whitespaces to make it a comma for easy splitting
         array_of_vals = line.strip().split(",") #splits string
-
         word = Word(array_of_vals[0], array_of_vals[1], array_of_vals[2],
         array_of_vals[3], array_of_vals[4], array_of_vals[5], array_of_vals[6],
         array_of_vals[7], array_of_vals[8], array_of_vals[9]) #create word object
@@ -67,21 +94,23 @@ for line in conllu_file:
 
 
 def remove_whitespaces_from_array(user_input):
-    for itwo in user_input: #iterate through input
-        user_input[user_input.index(itwo)] = itwo.strip() #remove all whitespaces
+    for counter,itwo in enumerate(user_input): #iterate through input
+        user_input[counter] = itwo.strip() #remove all whitespaces
 
 def remove_char(char, user_input):
     user_input = re.sub(char, '', str(user_input)) #removes the [ and the ]
     return user_input
 
-user_input = input()
+user_input = args.search
 
 for i in sentences:
 
     #for finding with label(first) and feature(second): use ':[cop, past]'
     #to find with relation: use ';nsubj:POS'
     #for plain searching for word: use '<word'
-    #for searching with tree use '|eat>bread'
+    #for searching with tree use '{eat>bread'
+    #for more complex searching(i.e you are using arguments) use '{argument=name, argument=name, form=eat>argument=name, form=bread'
+    #when searching with ambiguity do '{none=none>form=bread}'
 
     if user_input[0] == ":": #this is for the label and feature finder
         user_input = remove_char('[\[\]]', user_input)
@@ -93,7 +122,7 @@ for i in sentences:
         for word in i.words: #itervate through words in this sentence
             right_label = False #is this the right label
             right_feature = False #is this the right feature
-            if word.xpostag.lower().strip() == user_input[0].lower().strip():
+            if word.upostag.lower().strip() == user_input[0].lower().strip():
                 right_label = True
 
             if word.feats != "_":
@@ -121,18 +150,58 @@ for i in sentences:
                         correct = True
                         print(word.form, word.id)
 
-    elif user_input[0] == "<":
+    elif user_input[0] == "<": #search for word
         counter = 0
         user_input = remove_char('<', user_input)
         for word in i.words:
             if word.form.lower().strip() == user_input.lower().strip():
                 counter += 1
                 print(word.id)
-        print(counter) #this is one word plain #plain search
+        print(counter)
 
-    elif user_input[0] == "|": #tree
-        user_input = remove_char("|", user_input)
-        user_input = user_input.split("<")
-        user_input[0] = remove_char("<", user_input[0])
+    elif user_input[0] == "{": #tree
+        user_input = remove_char('{', user_input)
+        user_input = user_input.split(">")
+        user_input[0] = remove_char(">", user_input[0])
         remove_whitespaces_from_array(user_input)
-        
+
+        if not('=' in user_input[0]) and not('=' in user_input[1]):
+            for word in i.words:
+                for word_two in i.words:
+                    if user_input[0].strip().lower() == word.form.strip().lower() and user_input[1].strip().lower() == word_two.form.strip().lower():
+                        if word.id == word_two.head:
+                            print(word.id)
+
+        else:
+            input_one = dict(e.split('=') for e in user_input[0].split(','))
+            input_two = dict(e.split('=') for e in user_input[1].split(','))
+            # '{argument=name, argument=name, form=eat>argument=name, form=bread'
+            # [deprel=root upostag=VERB eat [deprel=obj upostag=NOUN bread]] is represented as
+            # '{deprel=root, upostag=Verb, form=eat > deprel=obj, upostag=noun, form=bread}'
+            count = 0
+
+            works_one_arr = []
+            works_two_arr = []
+
+            for word in i.words:
+                works = True
+                for n in input_one:
+
+                    if input_one[n].strip().lower() != word.text_to_attr(n.strip()).lower():
+                        works = False
+                if works:
+                    works_one_arr.append(word)
+
+            for word in i.words:
+                works = True
+                for n in input_two:
+                    if input_two[n].strip().lower() != word.text_to_attr(n.strip()).lower():
+                        works = False
+                if works:
+
+                    works_two_arr.append(word)
+
+            for word in works_one_arr:
+                for word_two in works_two_arr:
+                    if word.id == word_two.head:
+                        print(word.id)
