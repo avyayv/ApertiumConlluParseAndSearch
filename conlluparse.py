@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import re
 import pdb
 import argparse
@@ -30,7 +31,7 @@ class Word:
         self.misc = misc
         self.none = "none"
     def print_info(self):
-        return "Token: "+self.id+" Form: "+self.form+" Lemma: "+ self.lemma+" UPOSTAG: "+self.upostag+ " HEAD: "+self.head
+        return "Token: "+self.id+", Form: "+self.form+", Lemma: "+ self.lemma+", UPOSTAG: "+self.upostag+ ", HEAD: "+self.head+", DEPREL: "+self.deprel + ", "
 
     def text_to_attr(self,str):
         if str == "id":
@@ -49,13 +50,19 @@ class Word:
             return self.head
         elif str == "deprel":
             return self.deprel
+        elif str == "@rel":
+            return self.deprel
         elif str == "deps":
             return self.deps
         elif str == "misc":
             return self.misc
         elif str == "none":
             return self.none
-
+    def compare(self,word,number,word_two):
+        if number == 0:
+            return self.upostag.lower().strip() == word.lower().strip() or self.deprel.lower().strip() == word.lower().strip()
+        elif number == 1:
+            return self.id == word_two.head and (compare_without_caps(self.upostag, word) or compare_without_caps(self.deprel, word) or compare_without_caps(self.form, word) or compare_without_caps(self.lemma, word))
 
 
 class Sentence:
@@ -63,25 +70,23 @@ class Sentence:
         self.words = words
         self.id_name = id_name
         sentences.append(self)
+    def print_sentence(self):
+        word = ", Sentence: "
+        for i in self.words:
+            word = word+" "+i.form
+        return word
 
 
-parser = argparse.ArgumentParser(description='Parse a conllu file')
+parser = argparse.ArgumentParser(description="""
+        Use This Link For Documentation
+        http://wiki.apertium.org/wiki/Conllu_Parsing_and_Searching#Example_Of_How_To_Use_This_Program
+        """)
 
 parser.add_argument('connlufile', metavar='connlufilename', type=open,
                     help='the file to read i.e. \'text.txt\'')
 parser.add_argument('search', metavar='searchterms', type=str,
-                    help="""
-                    For finding with label(first) and feature(second): use \':[cop, past]\'\n
-                    To find with relation: use \';DEPREL:POS\'\n
-                    For plain searching for word: use \'<word\'\n
-                    For searching with tree use \'{eat>bread\'\n
-                    For more complex searching(i.e you are using arguments) use \'{argument=name, argument=name, form=eat>argument=name, form=bread\'\n
-                    When searching with ambiguity do \'{none=none>form=bread}\'
-                    A Sample Would Be: python conlluparse.py \"text.txt\" \'{none=none>form=bread}\'
-                    This would parse text.txt as a conllu file and would search for a term that is the head of bread
-                    The : ; < { are simply characters that indicate what the search is about.
-                    For instance if you start with a ; the program knows that it is searching with relation
-                    """
+                    help="Please see above for how to use searching"
+
                     )
 args = parser.parse_args()
 first = True
@@ -95,10 +100,12 @@ for line in args.connlufile:
         sentence = Sentence([], "")
 
     if line[0] == "#" and line.strip()[2] == "s":
+        line = line.replace("\t", "")
+        line = line.replace("\n", "")
         sentences[-1].id_name = line
 
-    if line[0] != "#" and line.strip() != "" : #check if it's a comment
-        line = line.replace("\t", ",")
+    if line[0] != "#" and line.strip() != "" : #check if it's not a comment
+        line = line.replace("\t", " ")
         line = line.replace("\n", "")
 
         line = re.sub(' +',',', line) #removes whitespaces to make it a comma for easy splitting
@@ -115,6 +122,9 @@ for line in args.connlufile:
         sentences[-1].words.append(word)
 
 
+def find_string(text):
+  matches=re.findall(r'\"(.+?)\"',text)
+  return matches[0]
 
 def remove_whitespaces_from_array(user_input):
     for counter,itwo in enumerate(user_input): #iterate through input
@@ -123,6 +133,13 @@ def remove_whitespaces_from_array(user_input):
 def remove_char(char, user_input):
     user_input = re.sub(char, '', str(user_input)) #removes the [ and the ]
     return user_input
+
+def compare_without_caps(word_one, word_two):
+    if word_one.strip().lower() == word_two.strip().lower():
+        return True
+    else:
+        return False
+
 
 user_input = args.search
 
@@ -135,21 +152,26 @@ for overall_counter, i in enumerate(sentences):
     #when searching with ambiguity do '{none=none>form=bread}'
     try:
         if user_input[0] == ":": #this is for the label and feature finder
+
             local_input = remove_char('[\[\]]', user_input)
+
             local_input = local_input.split(',') # makes array based on comma
+
             local_input[0] = remove_char(':', local_input[0]) #remove the :
+
             remove_whitespaces_from_array(local_input)
+
             for word in i.words: #itervate through words in this sentence
                 right_label = False #is this the right label
                 right_feature = False #is this the right feature
-                if word.upostag.lower().strip() == local_input[0].lower().strip() or word.deprel.lower().strip() == local_input[0].lower().strip():
+                if word.compare(local_input[0],0, 0):
                     right_label = True
                 if word.feats != "_":
                     for value in word.feats.values():
-                        if value.lower().strip() == local_input[1].lower().strip():
+                        if compare_without_caps(value,local_input[1]):
                             right_feature = True
                 if right_label and right_feature:
-                    print(word.print_info()+sentence.id_name)
+                    print(word.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
         elif user_input[0] == ";": #this is for the relation
             correct = False
             local_input = remove_char(';', user_input) #remove the ;
@@ -161,53 +183,92 @@ for overall_counter, i in enumerate(sentences):
                     for word in i.words:
                         if word.id == word_two.head and (word.upostag.lower() == local_input[1].lower() or word.deprel.lower() == local_input[1].lower() or word.form.lower() == local_input[1].lower() or word.lemma.lower() == local_input[1].lower()):
                             correct = True
-                            print(word.print_info()+sentence.id_name)
+                            print(word.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
 
         elif user_input[0] == "<": #search for word
-            counter = 0
             local_input = remove_char('<', user_input)
-            for word in i.words:
-                if word.form.lower().strip() == local_input.lower().strip():
-                    counter += 1
 
-                    print(word.print_info()+sentence.id_name)
+            for word in i.words:
+
+                if compare_without_caps(local_input, word.form):
+
+                    print(word.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
 
         elif user_input[0] == "{": #tree
             local_input = remove_char('{', user_input)
-            local_input = local_input.split(">")
-            local_input[0] = remove_char(">", local_input[0])
-            remove_whitespaces_from_array(local_input)
-            if not('=' in local_input[0]) and not('=' in local_input[1]):
-                for word in i.words:
-                    for word_two in i.words:
-                        if local_input[0].strip().lower() == word.form.strip().lower() and local_input[1].strip().lower() == word_two.form.strip().lower():
+            if ">" in local_input:
+                local_input = local_input.split(">")
+                local_input[0] = remove_char(">", local_input[0])
+                remove_whitespaces_from_array(local_input)
+                if not('=' in local_input[0]) and not('=' in local_input[1]):
+                    for word in i.words:
+                        for word_two in i.words:
+                            if compare_without_caps(local_input[0], word.form) and compare_without_caps(local_input[1], word_two.form.strip().lower()):
+                                if word.id == word_two.head:
+                                    print(word.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
+                else:
+                    input_one = dict(e.split('=') for e in local_input[0].split(','))
+                    input_two = dict(e.split('=') for e in local_input[1].split(','))
+                    # '{argument=name, argument=name, form=eat>argument=name, form=bread'
+                    # [deprel=root upostag=VERB eat [deprel=obj upostag=NOUN bread]] is represented as
+                    # '{deprel=root, upostag=Verb, form=eat > deprel=obj, upostag=noun, form=bread}'
+                    works_one_arr = []
+                    works_two_arr = []
+                    for word in i.words:
+                        works = True
+                        for n in input_one:
+                            if compare_without_caps(input_one[n], word.text_to_attr(n.strip())) == False:
+                                works = False
+                        if works:
+                            works_one_arr.append(word)
+                    for word in i.words:
+                        works = True
+                        for n in input_two:
+                            if compare_without_caps(input_two[n], word.text_to_attr(n.strip())) == False:
+                                works = False
+                        if works:
+                            works_two_arr.append(word)
+                    for word in works_one_arr:
+                        for word_two in works_two_arr:
                             if word.id == word_two.head:
-                                print(word.print_info()+sentence.id_name)
-            else:
-                input_one = dict(e.split('=') for e in local_input[0].split(','))
-                input_two = dict(e.split('=') for e in local_input[1].split(','))
-                # '{argument=name, argument=name, form=eat>argument=name, form=bread'
-                # [deprel=root upostag=VERB eat [deprel=obj upostag=NOUN bread]] is represented as
-                # '{deprel=root, upostag=Verb, form=eat > deprel=obj, upostag=noun, form=bread}'
-                works_one_arr = []
-                works_two_arr = []
-                for word in i.words:
-                    works = True
-                    for n in input_one:
-                        if input_one[n].strip().lower() != word.text_to_attr(n.strip()).lower():
-                            works = False
-                    if works:
-                        works_one_arr.append(word)
-                for word in i.words:
-                    works = True
-                    for n in input_two:
-                        if input_two[n].strip().lower() != word.text_to_attr(n.strip()).lower():
-                            works = False
-                    if works:
-                        works_two_arr.append(word)
-                for word in works_one_arr:
-                    for word_two in works_two_arr:
-                        if word.id == word_two.head:
-                            print(word.print_info()+sentence.id_name)
+                                print(word.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
+            elif "<" in local_input:
+                local_input = local_input.split("<")
+                local_input[0] = remove_char("<", local_input[0])
+                remove_whitespaces_from_array(local_input)
+                if not('=' in local_input[1]) and not('=' in local_input[0]):
+                    for word_two in i.words:
+                        for word in i.words:
+                            if compare_without_caps(local_input[1], word.form) and compare_without_caps(local_input[0], word_two.form.strip().lower()):
+                                if word.id == word_two.head:
+                                    print(word_two.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
+                else:
+                    input_one = dict(e.split('=') for e in local_input[0].split(','))
+                    input_two = dict(e.split('=') for e in local_input[1].split(','))
+                    # '{argument=name, argument=name, form=eat>argument=name, form=bread'
+                    # [deprel=root upostag=VERB eat [deprel=obj upostag=NOUN bread]] is represented as
+                    # '{deprel=root, upostag=Verb, form=eat > deprel=obj, upostag=noun, form=bread}'
+                    works_one_arr = []
+                    works_two_arr = []
+                    for word in i.words:
+                        works = True
+                        for n in input_one:
+                            if compare_without_caps(input_one[n], word.text_to_attr(n.strip())) == False:
+                                works = False
+                        if works:
+                            works_one_arr.append(word)
+                    for word in i.words:
+                        works = True
+                        for n in input_two:
+                            if compare_without_caps(input_two[n], word.text_to_attr(n.strip())) == False:
+                                works = False
+                        if works:
+                            works_two_arr.append(word)
+                    for word in works_one_arr:
+                        for word_two in works_two_arr:
+                            if word.id == word_two.head:
+                                print(word.print_info()+sentences[overall_counter].id_name+sentences[overall_counter].print_sentence())
+
+
     except AttributeError:
         continue
