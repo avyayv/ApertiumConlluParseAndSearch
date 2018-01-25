@@ -1,4 +1,4 @@
-# Apertium Conllu Parsing and Searching
+# Apertium CoNLL-U Parsing and Searching
 Please see the page on the apertium wiki for documentation http://wiki.apertium.org/w/index.php?title=Conllu_Parsing_and_Searching
 
 == Parse and Search through a conllu file ==
